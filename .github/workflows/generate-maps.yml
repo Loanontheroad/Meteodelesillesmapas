@@ -6,7 +6,9 @@ on:
     - cron: '0 6 * * *' # 06:00 UTC daily
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: generate-maps
@@ -46,6 +48,13 @@ jobs:
           python "generar_mapa_baleares.py"
           python "generar_minmax_baleares.py"
 
+      - name: Prepare pages content
+        run: |
+          mkdir -p generated
+          cp -f mapa_baleares_openmeteo.png generated/
+          cp -f mapa_baleares_min.png generated/
+          cp -f mapa_baleares_max.png generated/
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -56,46 +65,19 @@ jobs:
             mapa_baleares_max.png
           if-no-files-found: error
           retention-days: 7
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: generated
 
-      - name: Commit generated maps to repo
-        if: ${{ github.event_name != 'pull_request' }}
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-          mkdir -p generated
-          cp -f mapa_baleares_openmeteo.png generated/
-          cp -f mapa_baleares_min.png generated/
-          cp -f mapa_baleares_max.png generated/
-
-          # Up-to-date commit with up to 3 retries to avoid non-fast-forward
-          attempts=0
-          while [ $attempts -lt 3 ]; do
-            attempts=$((attempts+1))
-
-            # Reset local main to remote tip to ensure fast-forward
-            git fetch origin main
-            git checkout -B main origin/main
-
-            git add generated/*.png || true
-            if git diff --cached --quiet; then
-              echo "No changes to commit."
-              exit 0
-            fi
-
-            git commit -m "chore: update generated weather maps [skip ci]"
-            if git push origin HEAD:main; then
-              echo "Pushed successfully"
-              exit 0
-            else
-              echo "Push failed (attempt $attempts). Retrying..."
-              # Drop the last commit before retrying to avoid stacking duplicates
-              git reset --hard HEAD~1 || true
-              sleep 3
-            fi
-          done
-          echo "Failed to push after retries" >&2
-          exit 1
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
