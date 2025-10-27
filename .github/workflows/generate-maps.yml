@@ -1,0 +1,77 @@
+name: Generate Balearic Islands Weather Maps
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-maps
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate maps
+        env:
+          CI: true
+        run: |
+          python "generar_mapa_baleares.py"
+          python "generar_minmax_baleares.py"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meteo-illes-maps
+          path: |
+            mapa_baleares_openmeteo.png
+            mapa_baleares_min.png
+            mapa_baleares_max.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Commit generated maps to repo
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p generated
+          cp -f mapa_baleares_openmeteo.png generated/
+          cp -f mapa_baleares_min.png generated/
+          cp -f mapa_baleares_max.png generated/
+          git add generated/*.png
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update generated weather maps [skip ci]"
+            git push
+          fi
+
