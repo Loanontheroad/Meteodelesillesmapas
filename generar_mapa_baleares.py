@@ -14,6 +14,7 @@ import os
 import io
 import sys
 import time
+import unicodedata
 from datetime import datetime
 from typing import Tuple, List, Dict
 
@@ -232,6 +233,27 @@ def fetch_openmeteo(lat: float, lon: float) -> Dict:
 
 # ------------------ Dibujo ------------------
 
+def strip_accents(text: str) -> str:
+    try:
+        return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    except Exception:
+        return text
+
+def sanitize_text(text: str) -> str:
+    t = strip_accents(text)
+    # Evitar símbolos no ASCII comunes en fuentes por defecto
+    t = t.replace("°C", " C")
+    t = t.replace("ºC", " C")
+    t = t.replace("°", "")
+    t = t.replace("º", "")
+    return t
+
+def strip_accents(text: str) -> str:
+    try:
+        return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    except Exception:
+        return text
+
 def temp_to_color(temp: float) -> Tuple[int, int, int]:
     # Paleta similar a ejemplo: morado (-10) -> azul -> cian -> verde -> amarillo -> naranja -> rojo -> fucsia (50)
     stops = [
@@ -322,7 +344,7 @@ def main():
         font_small = ImageFont.load_default()
 
     # Barra de título
-    title = "Meteo de les Illes - Mapa actual"
+    title = sanitize_text("Meteo de les Illes - Mapa actual")
     fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
     draw.rectangle([(0, 0), (WIDTH, 50)], fill=(255, 255, 255))
     draw.text((20, 12), title, fill="#0d47a1", font=font_big)
@@ -335,7 +357,7 @@ def main():
         x, y = project_point_mercator(c["lon"], c["lat"], transform)
         meteo = fetch_openmeteo(c["lat"], c["lon"]) 
         temp_val = meteo.get("temp")
-        text = "Sin datos" if temp_val is None else f"{temp_val}°C"
+        text = sanitize_text("Sin datos") if temp_val is None else sanitize_text(f"{temp_val}°C")
 
         # Calcular caja estimada (antes de dibujar) para evitar solapes
         try:
@@ -385,7 +407,7 @@ def main():
         x = legend_left + int((t - min_t) / (max_t - min_t) * (legend_right - legend_left))
         draw.line([(x, legend_top + 20), (x, legend_top + 24)], fill=(40, 40, 40))
         draw.text((x - 8, legend_top + 26), str(t), fill=(40, 40, 40), font=font_legend)
-    draw.text(((legend_left + legend_right)//2 - 40, legend_top - 18), "Temp. °C", fill=(40, 40, 40), font=font_legend)
+    draw.text(((legend_left + legend_right)//2 - 40, legend_top - 18), sanitize_text("Temp. °C"), fill=(40, 40, 40), font=font_legend)
 
     out_name = "mapa_baleares_openmeteo.png"
     img.save(out_name)

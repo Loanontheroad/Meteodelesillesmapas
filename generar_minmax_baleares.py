@@ -7,6 +7,7 @@ Mapas de temperaturas mínimas y máximas diarias de las Islas Baleares
 
 import io
 import os
+import unicodedata
 import math
 import time
 from datetime import datetime
@@ -163,6 +164,17 @@ def temp_to_color(temp: float) -> Tuple[int, int, int]:
 
 # Badges
 
+def strip_accents(text: str) -> str:
+    try:
+        return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    except Exception:
+        return text
+
+def sanitize_text(text: str) -> str:
+    t = strip_accents(text)
+    t = t.replace("°C", " C").replace("ºC", " C").replace("°", "").replace("º", "")
+    return t
+
 def draw_badge(draw: ImageDraw.ImageDraw, x: int, y: int, text: str, temp: float, font: ImageFont.FreeTypeFont, placed: List[Tuple[int, int, int, int]]) -> bool:
     color = temp_to_color(temp)
     # Size estimate
@@ -182,7 +194,7 @@ def draw_badge(draw: ImageDraw.ImageDraw, x: int, y: int, text: str, temp: float
     draw.ellipse([(x-4, y-4), (x+4, y+4)], fill=color, outline="#ffffff")
     draw.rectangle([(box_x + 2, box_y + 2), (box_x + box_w + 2, box_y + box_h + 2)], fill=(120, 120, 120))
     draw.rectangle([(box_x, box_y), (box_x + box_w, box_y + box_h)], outline=(40, 40, 40), fill=color, width=2)
-    draw.text((box_x + 6, box_y + 5), text, fill="#000000", font=font)
+    draw.text((box_x + 6, box_y + 5), sanitize_text(text), fill="#000000", font=font)
     placed.append(candidate)
     return True
 
@@ -223,7 +235,7 @@ def render_map(kind: str, out_name: str):
         font_big = ImageFont.load_default()
         font_small = ImageFont.load_default()
 
-    title = "Meteo de les Illes - Temperaturas " + ("mínimas" if kind == "min" else "máximas")
+    title = sanitize_text("Meteo de les Illes - Temperaturas " + ("mínimas" if kind == "min" else "máximas"))
     fecha = datetime.now().strftime("%d/%m/%Y")
     draw.rectangle([(0, 0), (WIDTH, 50)], fill=(255, 255, 255))
     draw.text((20, 12), title, fill="#0d47a1", font=font_big)
@@ -236,7 +248,7 @@ def render_map(kind: str, out_name: str):
         x, y = int(x_m), int(y_m)
         tmin, tmax = fetch_minmax(c["lat"], c["lon"]) 
         temp = tmin if kind == "min" else tmax
-        text = "Sin datos" if temp is None else f"{round(temp,1)}°C"
+        text = sanitize_text("Sin datos") if temp is None else sanitize_text(f"{round(temp,1)}°C")
         draw_badge(draw, x, y, text, temp, font_small, placed)
 
     # Leyenda
@@ -263,7 +275,7 @@ def render_map(kind: str, out_name: str):
         x = legend_left + int((t - min_t) / (max_t - min_t) * (legend_right - legend_left))
         draw.line([(x, legend_top + 20), (x, legend_top + 24)], fill=(40, 40, 40))
         draw.text((x - 8, legend_top + 26), str(t), fill=(40, 40, 40), font=font_legend)
-    draw.text(((legend_left + legend_right)//2 - 50, legend_top - 18), "Temp. °C", fill=(40, 40, 40), font=font_legend)
+    draw.text(((legend_left + legend_right)//2 - 50, legend_top - 18), sanitize_text("Temp. °C"), fill=(40, 40, 40), font=font_legend)
 
     img.save(out_name)
     # Evitar abrir ventana en CI
