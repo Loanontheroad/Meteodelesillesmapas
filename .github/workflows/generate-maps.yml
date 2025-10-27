@@ -55,6 +55,9 @@ jobs:
           cp -f mapa_baleares_min.png generated/
           cp -f mapa_baleares_max.png generated/
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
